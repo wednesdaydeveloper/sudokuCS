@@ -5,10 +5,41 @@ namespace sudoku
 {
     public class Solver
     {
+        public class SolverIterator 
+        {
+	        public IEnumerator<Cell> GetEnumerator()
+			{
+				for (var row = 0; row < Size; row++)
+				{
+					for (var col = 0; col < Size; col++)
+					{
+						yield return new Cell { Row = row, Col = col };
+					}
+				}
+			}
+        }
+
         public class Cell
         {
             public int Row { get; internal set; }
             public int Col { get; internal set; }
+
+			//objと自分自身が等価のときはtrueを返す
+			public override bool Equals(object obj)
+			{
+                if (obj == null || !(obj is Cell))
+				{
+					return false;
+				}
+				var c = (Cell)obj;
+				return this.Row == c.Row && this.Col == c.Col;
+			}
+
+			//Equalsがtrueを返すときに同じ値を返す
+			public override int GetHashCode()
+			{
+				return this.Row * Size + this.Col;
+			}
         }
 
         public class SolvedCell : Cell
@@ -43,43 +74,39 @@ namespace sudoku
                    {6, 6, 6, 7, 7, 7, 8, 8, 8},
                };
 
-        readonly List<SolvedCell> InitialCell;
+		static readonly SolverIterator Iterator = new SolverIterator();
+
+		readonly List<SolvedCell> InitialCell;
 
         public Solver(int[,] input)
         {
             InitialCell = new List<SolvedCell>();
-            for (var row = 0; row < Size; row++)
+            foreach (var cell in Iterator)
             {
-                for (var col = 0; col < Size; col++)
+                var val = input[cell.Row, cell.Col];
+                if (val > 0)
                 {
-                    var val = input[row, col];
-                    if (val > 0)
+                    InitialCell.Add(new SolvedCell
                     {
-                        InitialCell.Add(new SolvedCell
-                        {
-                            Row = row,
-                            Col = col,
-                            Val = val,
-                            Block = SubBlockMask[row, col]
-                        });
-                    }
+                        Row = cell.Row,
+                        Col = cell.Col,
+                        Val = val,
+                        Block = SubBlockMask[cell.Row, cell.Col]
+                    });
                 }
             }
         }
 
 
-        int[,] answerArray(IEnumerable<SolvedCell> results)
+        int[,] AnswerArray(IEnumerable<SolvedCell> results)
         {
             var answer = new int[Size, Size];
-            for (var row = 0; row < Size; row++)
+			foreach (var currentCell in Iterator)
             {
-                for (var col = 0; col < Size; col++)
+                var c = results.FirstOrDefault(cell => cell.Equals(currentCell));
+                if (c != null)
                 {
-                    var c = results.FirstOrDefault(cell => cell.Row == row && cell.Col == col);
-                    if (c != null)
-                    {
-                        answer[row, col] = c.Val;
-                    }
+                    answer[currentCell.Row, currentCell.Col] = c.Val;
                 }
             }
             return answer;
@@ -96,25 +123,19 @@ namespace sudoku
 
         public Result Solve(IEnumerable<SolvedCell> results)
         {
-            if (results.Count() > 1)
-                System.Console.WriteLine("row: {0}, col: {1}, val: {2}", results.Last().Row, results.Last().Col, results.Last().Val);
-
 			var solvedCells = InitialCell.Union(results);
             var unsolvedCells = new List<UnsolvedCell>();
-            for (var row = 0; row < Size; row++)
+            foreach (var currentCell in Iterator)
             {
-                for (var col = 0; col < Size; col++)
+                if (!solvedCells.Any(cell => cell.Equals(currentCell)))
                 {
-                    if (!solvedCells.Any(cell => cell.Row == row && cell.Col == col))
-                    {
-                        var unused = UnusedValues(new Cell { Row = row, Col = col }, solvedCells);
-                        unsolvedCells.Add(new UnsolvedCell { Row = row, Col = col, Unused = unused });
-                    }
+                    var unused = UnusedValues(new Cell { Row = currentCell.Row, Col = currentCell.Col }, solvedCells);
+                    unsolvedCells.Add(new UnsolvedCell { Row = currentCell.Row, Col = currentCell.Col, Unused = unused });
                 }
             }
             if (unsolvedCells.Count == 0)
             {
-                return new Result { Solved = true, Array = answerArray(solvedCells) };
+                return new Result { Solved = true, Array = AnswerArray(solvedCells) };
             }
             else
             {
@@ -128,12 +149,10 @@ namespace sudoku
 						.ToList();
                     if (answers.Count() == 1)
                     {
-                        System.Console.WriteLine("solved!");
 						return answers.First();
                     }
                 }
             }
-			System.Console.WriteLine("back!");
 			return new Result { Solved = false };
         }
     }
